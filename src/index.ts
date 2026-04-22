@@ -8,6 +8,12 @@ import { getRedditClient, initializeRedditClient } from "./client/reddit-client"
 import type { BotDisclosureConfig, RedditAuthMode, RedditSafeMode, SafeModeConfig } from "./types"
 import { formatPostInfo, formatSubredditInfo, formatUserInfo } from "./utils/formatters"
 
+const MAX_COMMENT_BODY_CHARS = 280
+
+function truncateText(text: string, maxChars: number): string {
+  return text.length > maxChars ? `${text.slice(0, maxChars)}...` : text
+}
+
 // Load environment variables
 dotenv.config({ quiet: true })
 
@@ -329,7 +335,7 @@ server.addTool({
       .enum(["hour", "day", "week", "month", "year", "all"])
       .default("all")
       .describe("Time filter for top posts"),
-    limit: z.number().min(1).max(100).default(10).describe("Number of posts to retrieve"),
+    limit: z.number().min(1).max(25).default(10).describe("Number of posts to retrieve"),
   }),
   execute: async (args) => {
     const client = unwrapClient()
@@ -381,7 +387,7 @@ server.addTool({
       .enum(["hour", "day", "week", "month", "year", "all"])
       .default("all")
       .describe("Time filter for top comments"),
-    limit: z.number().min(1).max(100).default(10).describe("Number of comments to retrieve"),
+    limit: z.number().min(1).max(25).default(10).describe("Number of comments to retrieve"),
   }),
   execute: async (args) => {
     const client = unwrapClient()
@@ -491,7 +497,7 @@ server.addTool({
       .enum(["hour", "day", "week", "month", "year", "all"])
       .default("week")
       .describe("Time period for top posts"),
-    limit: z.number().min(1).max(100).default(10).describe("Number of posts to retrieve"),
+    limit: z.number().min(1).max(25).default(10).describe("Number of posts to retrieve"),
   }),
   execute: async (args) => {
     const client = unwrapClient()
@@ -619,7 +625,7 @@ server.addTool({
     subreddit: z.string().optional().describe("Limit search to specific subreddit (without r/ prefix)"),
     sort: z.enum(["relevance", "hot", "top", "new", "comments"]).default("relevance").describe("Sort order"),
     time_filter: z.enum(["hour", "day", "week", "month", "year", "all"]).default("all").describe("Time filter"),
-    limit: z.number().min(1).max(100).default(10).describe("Number of results"),
+    limit: z.number().min(1).max(25).default(10).describe("Number of results"),
     type: z.enum(["link", "sr", "user"]).default("link").describe("Type of content to search"),
   }),
   execute: async (args) => {
@@ -926,7 +932,14 @@ server.addTool({
     post_id: z.string().describe("The Reddit post ID"),
     subreddit: z.string().describe("The subreddit name (without r/ prefix)"),
     sort: z.enum(["best", "top", "new", "controversial", "old", "qa"]).default("best").describe("Comment sort order"),
-    limit: z.number().min(1).max(500).default(100).describe("Maximum number of comments to retrieve"),
+    limit: z.number().min(1).max(100).default(20).describe("Maximum number of comments to retrieve"),
+    compact: z.boolean().default(true).describe("Return compact output for lower token usage"),
+    max_body_chars: z
+      .number()
+      .min(80)
+      .max(500)
+      .default(MAX_COMMENT_BODY_CHARS)
+      .describe("Maximum characters returned per comment body"),
   }),
   execute: async (args) => {
     const client = unwrapClient()
@@ -947,6 +960,38 @@ server.addTool({
         throw new Error(`Failed to get comments: ${err.message}`)
       },
       ({ post, comments }) => {
+        const formattedComments = comments.map((comment) => ({
+          ...comment,
+          body: truncateText(comment.body, args.max_body_chars),
+        }))
+
+        if (args.compact) {
+          return JSON.stringify(
+            {
+              post: {
+                id: post.id,
+                title: post.title,
+                author: post.author,
+                subreddit: post.subreddit,
+                score: post.score,
+                numComments: post.numComments,
+                permalink: `https://reddit.com${post.permalink}`,
+              },
+              comments: formattedComments.map((comment) => ({
+                id: comment.id,
+                author: comment.author,
+                score: comment.score,
+                depth: comment.depth ?? 0,
+                isSubmitter: comment.isSubmitter,
+                permalink: `https://reddit.com${comment.permalink}`,
+                body: comment.body,
+              })),
+            },
+            null,
+            2,
+          )
+        }
+
         const header = `# Comments for: ${post.title}
 
 **Post by u/${post.author} in r/${post.subreddit}**
@@ -957,11 +1002,11 @@ server.addTool({
 
 `
 
-        if (comments.length === 0) {
+        if (formattedComments.length === 0) {
           return `${header}No comments found for this post.`
         }
 
-        const commentSummaries = comments
+        const commentSummaries = formattedComments
           .map((comment) => {
             const indent = "└─".repeat(Math.min(comment.depth ?? 0, 3))
             const authorBadge = comment.isSubmitter ? " **[OP]**" : ""

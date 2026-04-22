@@ -62,6 +62,34 @@ Or add to your MCP config (Claude Desktop, Cursor, etc.):
 claude mcp add --transport stdio reddit -- npx reddit-mcp-server
 ```
 
+### Option 4: Local Hardened Fork (Cursor)
+
+Use this when you want Cursor to run your local modified build instead of the npm package.
+
+1. Build the project:
+
+```bash
+pnpm install
+pnpm build
+```
+
+2. Add to your Cursor MCP config (`~/.cursor/mcp.json` on macOS/Linux or `C:/Users/<you>/.cursor/mcp.json` on Windows):
+
+```json
+{
+  "mcpServers": {
+    "reddit": {
+      "command": "node",
+      "args": ["C:/path/to/reddit-mcp-server/dist/index.js"]
+    }
+  }
+}
+```
+
+3. Restart Cursor MCP servers (or restart Cursor) after config changes.
+
+Tip: Re-run `pnpm build` whenever you change `src/*` so `dist/index.js` stays up to date.
+
 ## Features
 
 ### Read-only Tools

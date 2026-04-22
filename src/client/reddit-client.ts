@@ -58,6 +58,10 @@ function parsePostData(post: RedditApiPostData): RedditPost {
   }
 }
 
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(Math.max(value, min), max)
+}
+
 export class RedditClient {
   private readonly clientId: string
   private readonly clientSecret: string
@@ -656,7 +660,8 @@ export class RedditClient {
       readonly type?: string
     } = {},
   ): Promise<Either<Error, readonly RedditPost[]>> {
-    const { subreddit, sort = "relevance", timeFilter = "all", limit = 25, type = "link" } = options
+    const { subreddit, sort = "relevance", timeFilter = "all", limit = 10, type = "link" } = options
+    const boundedLimit = clamp(limit, 1, 25)
     const endpoint = Option(subreddit).fold(
       () => "/search.json",
       (sr) => `/r/${sr}/search.json`,
@@ -666,7 +671,7 @@ export class RedditClient {
       q: query,
       sort,
       t: timeFilter,
-      limit: limit.toString(),
+      limit: boundedLimit.toString(),
       type,
       // eslint-disable-next-line functype/prefer-fold -- conditional spread of native string | undefined into URLSearchParams init
       ...(subreddit !== undefined ? { restrict_sr: "true" } : {}),
@@ -697,10 +702,11 @@ export class RedditClient {
       readonly limit?: number
     } = {},
   ): Promise<Either<Error, { readonly post: RedditPost; readonly comments: readonly RedditComment[] }>> {
-    const { sort = "best", limit = 100 } = options
+    const { sort = "best", limit = 20 } = options
+    const boundedLimit = clamp(limit, 1, 100)
     const params = new URLSearchParams({
       sort,
-      limit: limit.toString(),
+      limit: boundedLimit.toString(),
     })
 
     try {
@@ -760,11 +766,12 @@ export class RedditClient {
       readonly limit?: number
     } = {},
   ): Promise<Either<Error, readonly RedditPost[]>> {
-    const { sort = "new", timeFilter = "all", limit = 25 } = options
+    const { sort = "new", timeFilter = "all", limit = 10 } = options
+    const boundedLimit = clamp(limit, 1, 25)
     const params = new URLSearchParams({
       sort,
       t: timeFilter,
-      limit: limit.toString(),
+      limit: boundedLimit.toString(),
     })
 
     try {
@@ -792,11 +799,12 @@ export class RedditClient {
       readonly limit?: number
     } = {},
   ): Promise<Either<Error, readonly RedditComment[]>> {
-    const { sort = "new", timeFilter = "all", limit = 25 } = options
+    const { sort = "new", timeFilter = "all", limit = 10 } = options
+    const boundedLimit = clamp(limit, 1, 25)
     const params = new URLSearchParams({
       sort,
       t: timeFilter,
-      limit: limit.toString(),
+      limit: boundedLimit.toString(),
     })
 
     try {
